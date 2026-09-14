@@ -1,9 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
-import Link from 'next/link';
 import { useAuth } from '@/lib/auth/auth-context';
-import { Shield, Lock, Mail, ArrowRight, UserCheck, AlertCircle, Database, CheckCircle2 } from 'lucide-react';
+import { Shield, Lock, Mail, ArrowRight, AlertCircle, Database } from 'lucide-react';
 import { UserRole } from '@/lib/types';
 
 export default function LoginPage() {
@@ -24,18 +23,6 @@ export default function LoginPage() {
     setLoading(true);
 
     const result = await login(email, password, role);
-    if (!result.success) {
-      setError(result.error || 'Authentication failed');
-    }
-    setLoading(false);
-  };
-
-  const handleQuickLogin = async (demoEmail: string, demoRole: UserRole) => {
-    setEmail(demoEmail);
-    setRole(demoRole);
-    setLoading(true);
-    setError(null);
-    const result = await login(demoEmail, 'password123', demoRole);
     if (!result.success) {
       setError(result.error || 'Authentication failed');
     }
@@ -126,7 +113,6 @@ export default function LoginPage() {
               <label className="block text-slate-600 font-medium uppercase tracking-wider text-[11px]">
                 Password
               </label>
-              <span className="text-[10px] text-sky-600 font-mono">Default: password123</span>
             </div>
             <div className="relative">
               <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
@@ -149,38 +135,6 @@ export default function LoginPage() {
             <ArrowRight className="w-4 h-4" />
           </button>
         </form>
-
-        {/* Quick Demo Credentials */}
-        <div className="pt-4 border-t border-slate-200 space-y-2.5">
-          <div className="text-[11px] text-slate-400 font-medium text-center uppercase tracking-wider">
-            Quick Persona Sign In
-          </div>
-          <div className="grid grid-cols-3 gap-2">
-            <button
-              onClick={() => handleQuickLogin('admin@institution.edu.ng', 'admin')}
-              className="p-2 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg text-[11px] text-slate-600 hover:text-slate-900 transition-colors text-center"
-            >
-              <div className="font-semibold">Admin</div>
-              <div className="text-[9px] text-slate-400 truncate">Prof. Okafor</div>
-            </button>
-
-            <button
-              onClick={() => handleQuickLogin('adeyemi.f@institution.edu.ng', 'lecturer')}
-              className="p-2 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg text-[11px] text-slate-600 hover:text-slate-900 transition-colors text-center"
-            >
-              <div className="font-semibold">Lecturer</div>
-              <div className="text-[9px] text-slate-400 truncate">Dr. Adeyemi</div>
-            </button>
-
-            <button
-              onClick={() => handleQuickLogin('alabi.bj@student.institution.edu.ng', 'student')}
-              className="p-2 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg text-[11px] text-slate-600 hover:text-slate-900 transition-colors text-center"
-            >
-              <div className="font-semibold">Student</div>
-              <div className="text-[9px] text-slate-400 truncate">Bolanle Alabi</div>
-            </button>
-          </div>
-        </div>
 
         <div className="text-center text-[11px] text-slate-400">
           New accounts are created by the system administrator.
