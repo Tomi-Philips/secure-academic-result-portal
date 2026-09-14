@@ -843,20 +843,85 @@ export const db = {
     return data as CourseRegistration;
   },
 
-  getRegistrationsByStudentId: async (studentId: string): Promise<CourseRegistration[]> => {
+  getStudentByIdentifier: async (identifier: string): Promise<Student | null> => {
+    if (!identifier) return null;
+    const clean = identifier.trim().toLowerCase();
+    const cleanNorm = clean.replace(/[^a-z0-9]/g, '');
+
+    const students = await db.getStudents();
+    return (
+      students.find(
+        (s) =>
+          s.id.toLowerCase() === clean ||
+          s.user_id.toLowerCase() === clean ||
+          s.matric_number.toLowerCase() === clean ||
+          s.matric_number.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanNorm ||
+          s.user?.email?.toLowerCase() === clean ||
+          s.user?.email?.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanNorm
+      ) || null
+    );
+  },
+
+  getRegistrationsByStudentId: async (identifier: string): Promise<CourseRegistration[]> => {
+    if (!identifier) return [];
+    const student = await db.getStudentByIdentifier(identifier);
+    const resolvedStudentId = student ? student.id : identifier;
+
+    // 1. Fetch explicit registrations
     const { data, error } = await supabaseAdmin
       .from('course_registrations')
       .select('*, courses(*, departments(*))')
-      .eq('student_id', studentId);
+      .eq('student_id', resolvedStudentId);
     throwIfError(error, 'getRegistrationsByStudentId');
 
-    return ((data ?? []) as any[]).map((r) => ({
+    const explicit = ((data ?? []) as any[]).map((r) => ({
       ...r,
+      student: student || undefined,
       course: r.courses
         ? { ...r.courses, department: r.courses.departments, departments: undefined }
         : undefined,
       courses: undefined,
     })) as CourseRegistration[];
+
+    if (explicit.length > 0) return explicit;
+
+    // 2. Auto-enrolment fallback: if student has no registrations yet, enrol in department & level courses
+    if (student && student.department_id && student.level) {
+      const { data: deptCourses } = await supabaseAdmin
+        .from('courses')
+        .select('*, departments(*)')
+        .eq('department_id', student.department_id)
+        .eq('level', student.level);
+
+      if (deptCourses && deptCourses.length > 0) {
+        const session = (await db.getActiveSession())?.name || '2025/2026';
+        const newRegs = deptCourses.map((c) => ({
+          student_id: student.id,
+          course_id: c.id,
+          academic_session: session,
+          semester: c.semester,
+          status: 'registered',
+        }));
+
+        const { data: inserted } = await supabaseAdmin
+          .from('course_registrations')
+          .insert(newRegs)
+          .select('*, courses(*, departments(*))');
+
+        if (inserted && inserted.length > 0) {
+          return (inserted as any[]).map((r) => ({
+            ...r,
+            student,
+            course: r.courses
+              ? { ...r.courses, department: r.courses.departments, departments: undefined }
+              : undefined,
+            courses: undefined,
+          })) as CourseRegistration[];
+        }
+      }
+    }
+
+    return [];
   },
 
   // ─── Results ─────────────────────────────────────────────────────────────

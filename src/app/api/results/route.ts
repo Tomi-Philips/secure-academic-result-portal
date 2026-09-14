@@ -5,6 +5,7 @@ import {
   decryptAndApproveResult,
   computeHomomorphicCourseStatistics,
 } from '@/lib/services/result-service';
+import { decryptAcademicScore } from '@/lib/crypto/seal';
 
 export async function GET(req: NextRequest) {
   try {
@@ -20,13 +21,52 @@ export async function GET(req: NextRequest) {
     }
 
     if (studentId) {
-      results = results.filter((r) => r.student_id === studentId);
+      const student = await db.getStudentByIdentifier(studentId);
+      const targetId = student ? student.id : studentId;
+      results = results.filter((r) => r.student_id === targetId);
     }
 
-    // Role-based filtering / masking if needed
+    // Decrypt approved scores on the fly so UI displays real CA, Exam, Total numbers
+    results = await Promise.all(
+      results.map(async (r) => {
+        if (r.status === 'approved' && (r.decrypted_total_score === undefined || r.decrypted_total_score === null)) {
+          try {
+            const [ca, exam, total] = await Promise.all([
+              r.encrypted_ca_score ? decryptAcademicScore(r.encrypted_ca_score) : null,
+              r.encrypted_exam_score ? decryptAcademicScore(r.encrypted_exam_score) : null,
+              r.encrypted_total_score ? decryptAcademicScore(r.encrypted_total_score) : null,
+            ]);
+            return {
+              ...r,
+              decrypted_ca_score: ca?.value,
+              decrypted_exam_score: exam?.value,
+              decrypted_total_score: total?.value,
+            };
+          } catch (decErr) {
+            console.error('Decryption on result fetch failed:', decErr);
+            return r;
+          }
+        }
+        return r;
+      })
+    );
+
+    // Role-based masking for students:
+    // Approved results reveal scores and grades; pending results show status only
     if (role === 'student') {
-      // Students only see approved results
-      results = results.filter((r) => r.status === 'approved');
+      results = results.map((r) => {
+        if (r.status !== 'approved') {
+          return {
+            ...r,
+            decrypted_ca_score: undefined,
+            decrypted_exam_score: undefined,
+            decrypted_total_score: undefined,
+            grade: undefined,
+            grade_point: undefined,
+          };
+        }
+        return r;
+      });
     }
 
     return NextResponse.json({ success: true, results });

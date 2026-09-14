@@ -81,6 +81,11 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: true, registrations });
     }
 
+    if (type === 'student-profile') {
+      const student = await db.getStudentByIdentifier(studentId || '');
+      return NextResponse.json({ success: true, student });
+    }
+
     return NextResponse.json({ success: true, message: 'Specify a query type' });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
