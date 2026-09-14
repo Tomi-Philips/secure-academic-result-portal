@@ -64,8 +64,60 @@ export async function getSealEngine() {
 
   initPromise = (async () => {
     try {
+      let wasmBinary: Uint8Array | undefined = undefined;
+
+      if (typeof window === 'undefined') {
+        try {
+          const fs = await import('fs');
+          const path = await import('path');
+          const createRequire = (await import('module')).createRequire;
+
+          // Resolve node-seal's actual location so we find the WASM next to it,
+          // regardless of whether the app runs from /var/task or a local cwd.
+          let sealDir: string | undefined;
+          try {
+            const req = createRequire(import.meta.url);
+            const pkgJson = req.resolve('node-seal/package.json');
+            sealDir = path.dirname(pkgJson);
+          } catch {
+            // Fallback to dist subpath resolution
+          }
+
+          const candidates: string[] = [];
+          if (sealDir) {
+            candidates.push(path.join(sealDir, 'dist', 'seal_throws.wasm'));
+            candidates.push(path.join(sealDir, 'seal_throws.wasm'));
+          }
+          candidates.push(
+            path.join(process.cwd(), 'public', 'seal_throws.wasm'),
+            path.join(process.cwd(), 'node_modules', 'node-seal', 'dist', 'seal_throws.wasm'),
+            path.resolve('./public/seal_throws.wasm'),
+            path.resolve('./node_modules/node-seal/dist/seal_throws.wasm'),
+            path.resolve('./.next/server', 'node_modules', 'node-seal', 'dist', 'seal_throws.wasm'),
+            path.resolve('./.next/server', 'public', 'seal_throws.wasm'),
+          );
+
+          for (const sp of candidates) {
+            if (fs.existsSync(sp)) {
+              wasmBinary = fs.readFileSync(sp);
+              break;
+            }
+          }
+
+          if (!wasmBinary) {
+            // Last resort: embedded base64 payload (set at build time via next.config.ts)
+            const b64 = process.env.NEXT_PUBLIC_SEAL_WASM_BASE64;
+            if (b64) {
+              wasmBinary = Uint8Array.from(Buffer.from(b64, 'base64'));
+            }
+          }
+        } catch (fsErr) {
+          console.warn('WASM filesystem search warning:', fsErr);
+        }
+      }
+
       const SEAL = (await import('node-seal')).default;
-      sealInstance = await SEAL();
+      sealInstance = await SEAL(wasmBinary ? { wasmBinary } : {});
 
       // 1. Configure BFV Scheme Parameters
       const schemeType = sealInstance.SchemeType.bfv;
